@@ -56,6 +56,7 @@ export default function App() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const handleSendMessageRef = useRef<any>(null);
 
   // Initialize Gemini
@@ -131,6 +132,19 @@ export default function App() {
     }
   }, []);
 
+  const stopSpeaking = () => {
+    if (audioSourceRef.current) {
+      try {
+        audioSourceRef.current.stop();
+        audioSourceRef.current.disconnect();
+      } catch (e) {
+        // Already stopped
+      }
+      audioSourceRef.current = null;
+    }
+    setIsSpeaking(false);
+  };
+
   const toggleListening = () => {
     if (!isSpeechSupported) {
       alert("La reconnaissance vocale n'est pas supportée par votre navigateur ou bloquée par les paramètres de sécurité.");
@@ -142,11 +156,7 @@ export default function App() {
     } else {
       try {
         // Stop any current speaking
-        if (audioContextRef.current && audioContextRef.current.state === 'running') {
-          // In a real app we'd stop the source node, but for simplicity we'll just pause the context
-          // or let the next playPCM handle it.
-        }
-        setIsSpeaking(false);
+        stopSpeaking();
         recognitionRef.current?.start();
         setIsListening(true);
       } catch (error) {
@@ -213,8 +223,13 @@ export default function App() {
       source.buffer = buffer;
       source.connect(audioContext.destination);
       
+      audioSourceRef.current = source;
+      
       source.onended = () => {
-        setIsSpeaking(false);
+        if (audioSourceRef.current === source) {
+          setIsSpeaking(false);
+          audioSourceRef.current = null;
+        }
       };
 
       setIsSpeaking(true);
@@ -225,8 +240,34 @@ export default function App() {
     }
   };
 
+  const stopKeywords = ['arrête', 'arrete', 'stop', 'tais-toi', 'silence', 'tais toi', 'chut'];
+
   const handleSendMessage = async (text: string = input) => {
     if (!text.trim() || isLoading) return;
+
+    // Check for stop command
+    const lowerText = text.toLowerCase().trim();
+    const isStopCommand = stopKeywords.some(keyword => lowerText.includes(keyword));
+    
+    if (isStopCommand) {
+      stopSpeaking();
+      // If the user *only* said a stop keyword (or very close to it), don't trigger a new AI response
+      const isOnlyStop = stopKeywords.some(keyword => 
+        lowerText === keyword || 
+        lowerText === keyword + " de parler" ||
+        lowerText === keyword + "." ||
+        lowerText === "s'il te plaît " + keyword ||
+        lowerText === "s'il te plait " + keyword
+      );
+      
+      if (isOnlyStop) {
+        setInput('');
+        return;
+      }
+    }
+
+    // Always stop previous speech when a new message is sent
+    stopSpeaking();
 
     const userMessage: Message = {
       id: Date.now().toString(),
