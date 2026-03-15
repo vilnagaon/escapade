@@ -1,0 +1,8 @@
+{
+  "name": "L'Escapade - Concierge Touristique",
+  "description": "Assistant touristique intelligent pour mobile homes, offrant des recommandations locales basées sur la géolocalisation avec interaction vocale.",
+  "requestFramePermissions": [
+    "geolocation",
+    "microphone"
+  ]
+}
